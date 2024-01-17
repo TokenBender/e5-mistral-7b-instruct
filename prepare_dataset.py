@@ -1,24 +1,16 @@
-from collections import defaultdict
-from datasets import load_dataset,Dataset,DatasetDict
+from datasets import load_dataset, Dataset, DatasetDict
 
-dataset = load_dataset("snli")
-
-train = defaultdict(dict)
-
-for example in dataset["train"]:
-    if example["label"] == 0:
-        train[example["premise"]]["positive"] = example["hypothesis"]
-    elif example["label"] == 2:
-        train[example["premise"]]["negative"] = example["hypothesis"]
+dataset = load_dataset("your_dataset_name")  # Replace with the actual dataset name
 
 train_dataset = []
-for key,value in train.items():
-    if "negative" in value and "positive" in value:
-        train_dataset.append({
-            "sentence": key,
-            "positive": value["positive"],
-            "negative": value["negative"]
-        })
+
+for example in dataset["train"]:
+    example["instruction"] = 'Instruct: ' + example["task"] + '\nQuery: ' + example["query"]
+    train_dataset.append({
+        "instruction": example["instruction"],
+        "positive": example["pos"],
+        "negative": example["neg"]
+    })
 
 data = Dataset.from_list(train_dataset)
 

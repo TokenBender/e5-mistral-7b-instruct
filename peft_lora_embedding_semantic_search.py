@@ -299,13 +299,13 @@ def main():
 
     def preprocess_function(examples):
 
-        queries = examples["sentence"]
+        queries = examples["instruction"]
         queries = get_detailed_instruct(task, queries)
         batch_dict = tokenizer(queries, max_length=args.max_length - 1, return_attention_mask=False, padding=False, truncation=True)
         batch_dict['input_ids'] = [input_ids + [tokenizer.eos_token_id] for input_ids in batch_dict['input_ids']]
         batch_dict = tokenizer.pad(batch_dict, padding=True, return_attention_mask=True, return_tensors='pt')
 
-        result = {f"sentence_{k}": v for k, v in batch_dict.items()}
+        result = {f"instruction_{k}": v for k, v in batch_dict.items()}
 
         queries = examples["positive"]
         batch_dict = tokenizer(queries, max_length=args.max_length - 1, return_attention_mask=False, padding=False, truncation=True)
@@ -323,7 +323,7 @@ def main():
         for k, v in batch_dict.items():
             result[f"negative_{k}"] = v
 
-        result["labels"] = [0] * len(examples["sentence"]) 
+        result["labels"] = [0] * len(examples["instruction"]) 
         return result
 
     processed_datasets = dataset.map(
@@ -468,11 +468,11 @@ def main():
             active_dataloader = train_dataloader
         for step, batch in enumerate(active_dataloader):
             with accelerator.accumulate(model):
-                sentence_embs = model(**{k.replace("sentence_", ""): v for k, v in batch.items() if "sentence" in k})
+                instruction_embs = model(**{k.replace("instruction_", ""): v for k, v in batch.items() if "instruction" in k})
                 positive_embs = model(**{k.replace("positive_", ""): v for k, v in batch.items() if "positive" in k})
                 negative_embs = model(**{k.replace("negative_", ""): v for k, v in batch.items() if "negative" in k})
                 negative_embs = torch.unsqueeze(negative_embs,1)
-                loss = loss_fn(sentence_embs, positive_embs, negative_embs)
+                loss = loss_fn(instruction_embs, positive_embs, negative_embs)
                 total_loss += accelerator.reduce(loss.detach().float(), reduction="sum")
                 accelerator.backward(loss)
                 optimizer.step()
@@ -502,11 +502,11 @@ def main():
         model.eval()
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
-                sentence_embs = model(**{k.replace("sentence_", ""): v for k, v in batch.items() if "sentence" in k})
+                instruction_embs = model(**{k.replace("instruction_", ""): v for k, v in batch.items() if "instruction" in k})
                 positive_embs = model(**{k.replace("positive_", ""): v for k, v in batch.items() if "positive" in k})
                 negative_embs = model(**{k.replace("negative_", ""): v for k, v in batch.items() if "negative" in k})
-                p_scores = torch.diagonal(sentence_embs @ positive_embs.T, 0)
-                n_scores =  torch.diagonal(sentence_embs @ negative_embs.T, 0)
+                p_scores = torch.diagonal(instruction_embs @ positive_embs.T, 0)
+                n_scores =  torch.diagonal(instruction_embs @ negative_embs.T, 0)
                 prediction_scores = torch.argmax(torch.stack([p_scores,n_scores],dim=1),dim=1).tolist()
             prediction_scores, references = accelerator.gather_for_metrics((prediction_scores, batch["labels"]))
             metric.add_batch(
